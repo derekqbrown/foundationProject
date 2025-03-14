@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const userService = require('../services/userService');
-const authenticateJWT = require('./util/authJWT');
+const userService = require('../service/requestService');
+
 
 router.post('/tickets', async (req, res) => {
     const { author, description, type="Other", status="Pending", amount } = req.body;

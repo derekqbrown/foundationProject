@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const userService = require('../services/userService');
+const userService = require('../service/userService');
 
 router.post('/register', async (req, res) => {
     const { username, password, role = 'EMPLOYEE' } = req.body;
@@ -15,9 +15,9 @@ router.post('/register', async (req, res) => {
     }
 
     const newUser = { username, password, role };
-    userService.createUser(newUser);
+    let data = userService.createUser(newUser);
 
-    return res.status(201).json({ message: 'User registered successfully', user: newUser });
+    return res.status(201).json({ message: data.message, user:data.user });
 });
 
 router.post("/login", async (req, res) => {
@@ -28,10 +28,13 @@ router.post("/login", async (req, res) => {
     }
 
     const data = await userService.loginUser(username, password);
-    if(data){
-        res.status(200).json({message: "You have logged in!", data: token});
+    if(data.token){
+        res.status(200).json({message: data.message, data: token});
     }else{
-        res.status(401).json({message: "Invalid login"});
+        if(data.message === "User not found"){
+            res.status(404).json({message: data.message})
+        }
+        res.status(401).json({message: data.message});
     }
 })
 
@@ -42,14 +45,17 @@ router.put('/user', async (req, res) => {
         return res.status(400).json({ message: 'Invalid request.' });
     }
 
-    const existingUser = userService.getUserByUsername(username);
-    if (!existingUser.user) {
-        return res.status(404).json({ message: 'User not found.' });
+    const existingUser = userService.getUserByUsername(username).user;
+    if (!existingUser) {
+        return res.status(404).json({ message: existingUser.message });
     }
 
-    const data = userService.updateUser(existingUser.user.userId,)
-
-    return res.status(201).json({ message: 'User updated successfully', user: data.user });
+    const data = userService.updateUser(existingUser.userId, password, role);
+    if(data.user){
+        logger.info(data.message, data.user);
+        return res.status(201).json({ message:data.message, user: data.user });
+    }
+    return res.status(201).json({ message:data.message, user: data.user });
 });
 
 module.exports = router;

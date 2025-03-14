@@ -1,16 +1,13 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const { DynamoDBDocumentClient, GetCommand, PutCommand } = require("@aws-sdk/lib-dynamodb");
 const logger = require("../util/logger");
-const bcrypt = require("bcrypt");
 
 const client = new DynamoDBClient({region: "us-west-2"});
 const documentClient = DynamoDBDocumentClient.from(client);
 
 const TableName = "Users";
-const saltNumber = 10;
 
 async function createUser(user){
-    user.password = await bcrypt.hash(user.password, saltNumber);
 
     const command = new PutCommand({
         TableName,
@@ -39,6 +36,7 @@ async function getUserById(user_id){
         return null;
     }
 }
+
 async function getUserByUsername(username){
     const command = new ScanCommand({
         TableName,
@@ -56,31 +54,56 @@ async function getUserByUsername(username){
         return null;
     }
 }
-async function updateUser(userId, newPassword, newRole) {
-    let updateExpression = 'SET';
-    let expressionAttributeValues = {};
-    
-    const params = {
-        TableName: USERS_TABLE,
-        Key: {
-            userId: userId // Primary key (or partition key) for the user
-        },
-        UpdateExpression: updateExpression,
-        ExpressionAttributeNames: {
-            '#password': 'password', // DynamoDB reserved word "password"
-            '#role': 'role'          // DynamoDB reserved word "role"
-        },
-        ExpressionAttributeValues: expressionAttributeValues,
-        ReturnValues: 'ALL_NEW' // Return the updated attributes
-    };
 
+async function updatePassword(userId, newPassword) {
     try {
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        const params = {
+            TableName,
+            Key: {
+                user_id: userId 
+            },
+            UpdateExpression: 'SET #password = :password',
+            ExpressionAttributeNames: {
+                '#password': 'password' 
+            },
+            ExpressionAttributeValues: {
+                ':password': hashedPassword 
+            },
+            ReturnValues: 'ALL_NEW' 
+        };
+
         const result = await dynamoDb.update(params).promise();
-        console.log('User updated successfully:', result);
-        return result.Attributes; // Returning updated user info
+        return result.Attributes; 
     } catch (error) {
-        throw new Error('Could not update user.');
+        return null;
     }
 }
 
-module.exports = {createUser, getUserById, getUserByUsername, updateUser };
+async function updateRole(userId, newRole) {
+    try {
+        const params = {
+            TableName,
+            Key: {
+                user_id: userId 
+            },
+            UpdateExpression: 'SET #role = :role',
+            ExpressionAttributeNames: {
+                '#role': 'role' 
+            },
+            ExpressionAttributeValues: {
+                ':role': newRole 
+            },
+            ReturnValues: 'ALL_NEW'
+        };
+
+        const result = await dynamoDb.update(params).promise();
+        logger.info('Role updated: ', result);
+        return result.Attributes; 
+    } catch (error) {
+        return null;
+    }
+}
+
+module.exports = {createUser, getUserById, getUserByUsername, updatePassword, updateRole };
