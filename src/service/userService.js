@@ -2,6 +2,8 @@ const userDao = require("../repository/userDAO");
 const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
 const bcrypt = require("bcrypt");
+const logger = require("../util/logger");
+const { getJWTSecret} = require("../util/getJWTKey");
 
 const saltNumber = 10;
 
@@ -11,26 +13,27 @@ async function createUser(user){
     if(username.length < 1 || user.password.length < 1){
         return {message: "Username or password is too short"};
     }
-    
-    let hashedPassword = bcrypt.hash(user.password, saltNumber);
+    let hashedPassword = await bcrypt.hash(user.password, saltNumber);
 
     const newUser = {
-        user_id: uuidv4(),
+        userId: uuidv4(),
         username: username,
         password: hashedPassword,
         role: user.role || 'EMPLOYEE'
     };
 
-    const result = await userDao.createUser(newUser);
-
+    const result = await userDao.postUser(newUser);
     if(!result){
+        logger.error("Failed to create user");
         return {message: "Failed to create user"};
     }else{
-        return {message: "Created user", user: result}
+        logger.info("User created", result);
+        return {message: "User created", user: result}
     }
 }
 
 const loginUser = async (username, password) => {
+    const JWT_SECRET_KEY = await getJWTSecret();
     try {
         const user = await userDao.getUserByUsername(username);
         
@@ -40,28 +43,28 @@ const loginUser = async (username, password) => {
         }
     
         const isMatch = await bcrypt.compare(password, user.password);
-        
         if (!isMatch) {
             logger.error("Invalid credentials");
             return {message: "Invalid credentials"};
             
         }
-    
+        
         const payload = {
             user_id: user.user_id,
             username: user.username,
+            role: user.role || 'EMPLOYEE',
         };
-        // I need to update the secret key later
-        const token = jwt.sign(payload, 'your_jwt_secret', { expiresIn: '1h' }); 
-    
-        return { token }; 
+
+        const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '1h' });
+        logger.info("Login successful");
+        return {message: "Login successful", token: token }; 
     } catch (error) {
         logger.error("An error occurred: ", error);
         return {message: "An error occurred"};
     }
 };
 
-async function getUserByUsername(username){
+async function getUser(username){
     if(username.length < 1){
         logger.error("Username is too short");
         return {message: "Username is too short"};
@@ -69,55 +72,62 @@ async function getUserByUsername(username){
     const data = await userDao.getUserByUsername(username);
 
     if(!data){
-        logger.error("User not found");
         return {message: "User not found"};
     }
     return {message: "User found", user:data};
     
 }
+async function updateUserPassword(userId, newPassword) {
+    const user = await userDao.getUserById(userId);
 
-async function updateUser(userId, newPassword = null, newRole = null) {
-    const data = await userDao.getUserByUserid(userId);
-
-    if (!data) {
+    if (!user) {
         logger.error("User not found");
         return null;
     }
-
-    let attributeToUpdate = null;
-    let updateMethod = null;
-    let updateValue = null;
-
-    if (newPassword) {
-        attributeToUpdate = 'password';
-        updateMethod = userDao.updatePassword;  
-        updateValue = bcrypt.hash(newPassword, saltNumber);;
+    if(!newPassword || newPassword.length < 1){
+        logger.error("Password is too short");
+        return {message: "Password is too short"};
     }
-
-    if (newRole) {
-        attributeToUpdate = 'role';
-        updateMethod = userDao.updateRole;  
-        updateValue = newRole;
-    }
-
-    if (!attributeToUpdate) {
-        logger.error("Failed to update. Missing attribute");
-        return { message: "Failed to update" };
-    }
-
+    let hashedPassword = await bcrypt.hash(newPassword, saltNumber);
     try {
-        const updatedUser = await updateMethod(userId, updateValue);
-        if(!updatedUser){
-            logger.error(`Failed to update ${attributeToUpdate}.`);
-            return { message: `Failed to update ${attributeToUpdate}.` };
-        }
-        logger.info(`${attributeToUpdate} updated for user: ${userId}`);
-        return { message: `${attributeToUpdate} updated for user: ${userId}`, user: updatedUser };
-    } catch (error) {
-        logger.error(`An error occurred while updating ${attributeToUpdate}.`, error);
-        return { message: `An error occurred while updating ${attributeToUpdate}.` };
-    }
+        const updatedUser = await userDao.updatePassword(userId, hashedPassword, user);
 
+        if(!updatedUser){
+            logger.error("Failed to update password.");
+            return { message: "Failed to update password." };
+        }
+        logger.info(`Password updated for user: ${userId}`);
+        return { message: `Password updated for user: ${userId}`, user: updatedUser };
+    } catch (error) {
+        logger.error("An error occurred while updating password.", error);
+        return { message: "An error occurred while updating password." };
+    }
+}
+async function updateUserRole(userId) {
+
+    if(req.user.role != "MANAGER"){
+        logger.error("User not authorized");
+        return { message: "User not authorized" };
+    }
+    const user = await userDao.getUserById(userId);
+    
+    if (!user) {
+        logger.error("User not found");
+        return { message: "User not found" };
+    }
+    let newRole = newRole === "EMPLOYEE" ? "MANAGER" : "EMPLOYEE";
+    try {
+        const updatedUser = await userDao.updateRole(userId, newRole, user);
+        if(!updatedUser){
+            logger.error("Failed to update role.");
+            return { message: "Failed to update role." };
+        }
+        logger.info(`Role updated for user: ${userId}`);
+        return { message: `Role updated for user: ${userId}`, user: updatedUser };
+    } catch (error) {
+        logger.error("An error occurred while updating role.", error);
+        return { message: "An error occurred while updating role." };
+    }
 }
 
-module.exports = {createUser, loginUser, getUserByUsername, updateUser }
+module.exports = {createUser, loginUser, getUser, updateUserPassword, updateUserRole }
