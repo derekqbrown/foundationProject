@@ -7,11 +7,10 @@ const documentClient = DynamoDBDocumentClient.from(client);
 const TableName = "UserTickets";
 
 async function postUser(user){
-    let userId =`USER#${user.userId}`
-    user.userId = userId;
+    user.user_id = `USER#${user.user_id}`;
     const userWithSortKey = {
         ...user,        
-        sort_key: userId
+        sort_key: user.user_id
     };
 
     const command = new PutCommand({
@@ -27,10 +26,10 @@ async function postUser(user){
     }
 }
 
-async function getUserById(userId){
+async function getUserById(user_id){
     const command = new GetCommand({
         TableName,
-        Key: {userId}
+        Key: {user_id, sort_key:user_id}
     });
 
     try{
@@ -63,42 +62,42 @@ async function getUserByUsername(username){
     }
 }
 
-async function updatePassword(userId, newPassword, user) {
-
+async function updatePassword(user_id, newPassword, user) {
+    const updatedUser = {
+        user_id: user_id,  
+        username: user.username,
+        password: newPassword,
+        role: user.role,
+        sort_key: user_id
+    }
     try {
-        let 
         const command = new PutCommand({
             TableName,
-            Item: {
-                user_id: userId,  
-                username: user.username,
-                password: newPassword,
-                role: user.role,
-                sort_key: userId
-            }
+            Item: updatedUser
         });
-        await documentClient.send(command);
-        return results.Item; 
+        const data = await documentClient.send(command);
+        if(data){return updatedUser;}
+        return null;
     } catch (err) {
         console.error('Error in updatePassword:', err);
         return null;
     }
 }
 
-async function updateRole(userId, newRole, user) {
+async function updateRole(newRole, user) {
     try {
         const command = new PutCommand({
             TableName,
             Item: {
-                user_id: userId, 
+                user_id: user.userId, 
                 username: user.username,
                 password: user.password,
                 role: newRole,
-                sort_key: userId
+                sort_key: user.userId
             }
         });
-        const results = await documentClient.send(command);
-        return results.Item; 
+        const data = await documentClient.send(command);
+        return data.Item; 
     } catch (err) {
         console.error('Error in updateRole:', err);
         return null;

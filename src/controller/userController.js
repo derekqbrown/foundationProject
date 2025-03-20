@@ -39,7 +39,7 @@ router.post("/login", async (req, res) => {
 router.put("/password", authenticateJWT, async (req, res) => {
     const { username, password } = req.body;
 
-    if (!username || !password) { // this is the new password, not the current one
+    if (!username || !password || password.length < 1) { // this is the new password, not the current one
         return res.status(400).json({ message: 'Invalid request.' });
     }
     
@@ -47,29 +47,18 @@ router.put("/password", authenticateJWT, async (req, res) => {
     if (!existingUser.user) {
         return res.status(404).json({ message: "User not found" });
     }
-
     const data = await userService.updateUserPassword(req.user.user_id, password);
-    if(data.user){
-        return res.status(201).json({ message:data.message, user: data.user });
-    }
-    return res.status(201).json({ message:data.message, user: data.user });
+    return res.status(data?.code || 200).json({ message:data.message, user: data.user });
 });
 
 router.put("/role", authenticateJWT, async (req, res) => {
-    const { userToUpdate } = req.body;
+    const { username } = req.body;
 
-    if (!userToUpdate) {
+    if (!username) {
         return res.status(400).json({ message: 'Invalid request.' });
     }
-
-    const existingUser = await userService.getUser(userToUpdate).user;
-    if (!existingUser) {
-        return res.status(404).json({ message: existingUser.message });
-    }
-
-    const data = await userService.updateUserRole(existingUser.userId);
-    
-    return res.status(201).json({ message:data.message, user: data.user });
+    const data = await userService.updateUserRole(req, username);
+    return res.status(data?.code || 201).json({ message:data?.message, user: data.user });
 });
 
 module.exports = router;

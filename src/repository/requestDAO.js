@@ -1,5 +1,5 @@
 const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
-const { DynamoDBDocumentClient, GetCommand, PutCommand, ScanCommand } = require("@aws-sdk/lib-dynamodb");
+const { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } = require("@aws-sdk/lib-dynamodb");
 
 const client = new DynamoDBClient({region: "us-west-2"});
 const documentClient = DynamoDBDocumentClient.from(client);
@@ -17,8 +17,8 @@ async function postTicket(ticket){
         Item: ticketWithSortKey
     });
     try{
-        await documentClient.send(command);
-        return ticket;
+        data = await documentClient.send(command);
+        return data;
     }catch(err){
         console.error('Error in postTicket:', err);
         return null;
@@ -28,9 +28,9 @@ async function postTicket(ticket){
 async function getTicketsByUserId(userId) {
     const command = new QueryCommand({
         TableName,
-        KeyConditionExpression: 'PK = :user_id and begins_with(sort_key, :ticket_prefix)',
+        KeyConditionExpression: 'user_id = :user_id and begins_with(sort_key, :ticket_prefix)',
         ExpressionAttributeValues: {
-            ':user_id': `USER#${userId}`, 
+            ':user_id': userId, 
             ':ticket_prefix': 'TICKET#'    
         }
     });
@@ -44,13 +44,30 @@ async function getTicketsByUserId(userId) {
     }
 }
 
-async function getTicketsByStatus(status) {
+async function getTicketsByStatus(author, status) {
+    // const command = new QueryCommand({
+    //     TableName,
+    //     IndexName: 'StatusIndex',  
+    //     KeyConditionExpression: '#status = :status',
+    //     ExpressionAttributeNames: {
+    //         '#status': 'status'  
+    //     },
+    //     ExpressionAttributeValues: {
+    //         ':status': status
+    //     }
+    // });
     const command = new QueryCommand({
         TableName,
         IndexName: 'StatusIndex',  
-        KeyConditionExpression: 'status = :status',
+        KeyConditionExpression: '#status = :status',
+        FilterExpression: '#user_id <> :author',  
+        ExpressionAttributeNames: {
+            '#status': 'status',
+            '#user_id': 'user_id'  
+        },
         ExpressionAttributeValues: {
-            ':status': status
+            ':status': status,
+            ':author': author  
         }
     });
 
@@ -64,13 +81,12 @@ async function getTicketsByStatus(status) {
 }
 
 async function updateTicketStatus(ticket) {
-
+    console.log(ticket);
     try {
         const command = new PutCommand({
             TableName,
             Item: {
-                ...ticket,
-                sort_key: `TICKET#${ticket.ticket_id}`
+               ...ticket 
             }
         });
         await documentClient.send(command);
@@ -80,20 +96,21 @@ async function updateTicketStatus(ticket) {
         return null;
     }
 }
-async function getTicketById(userId, ticketId){
-    const command = new GetCommand({
+async function getTicketById(ticketId){
+    const command = new QueryCommand({
         TableName,
-        Key: {
-            user_id: userId,
-            sort_key: `TICKET#${ticketId}`
+        IndexName: 'TicketIdIndex', 
+        KeyConditionExpression: 'ticket_id = :ticket_id',
+        ExpressionAttributeValues: {
+            ':ticket_id': ticketId
         }
     });
 
     try{
         const data = await documentClient.send(command);
-        return data.Item;
+        return data.Items ? data.Items[0] : null;
     }catch(err){
-        console.error('Error in getUserById:', err);
+        console.error('Error in getTicketById:', err);
         return null;
     }
 }
