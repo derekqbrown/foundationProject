@@ -49,7 +49,7 @@ router.put('/update', authenticateJWT, async (req, res) => {
     let updateTicket = await requestService.getTicketById(ticket_id);
     
     if(updateTicket?.code === 400 || updateTicket?.ticket.status != "Pending"){
-        return res.status(updateTicket.code || 400).json({message:updateTicket.message})
+        return res.status(400).json({message:"Invalid request"})
     }
     updateTicket.ticket.status = status;
     let data = await requestService.updateTicketStatus(updateTicket.ticket);
