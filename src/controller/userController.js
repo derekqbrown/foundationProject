@@ -39,7 +39,7 @@ router.post("/login", async (req, res) => {
 router.put("/password", authenticateJWT, async (req, res) => {
     const { username, password } = req.body;
 
-    if (!username || !password || password.length < 1) { // this is the new password, not the current one
+    if (!username || !password || password.length < 1 || username != req.user.username) { // this is the new password, not the current one
         return res.status(400).json({ message: 'Invalid request.' });
     }
     
